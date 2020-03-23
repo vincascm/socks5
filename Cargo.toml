@@ -1,0 +1,12 @@
+[package]
+name = "socks5x"
+version = "0.1.0"
+authors = ["vinoca <vinoca@vinoca.org>"]
+description = "a socks5 protocol with extra command lookup_host"
+repository = "https://github.com/vincascm/socks5x"
+edition = "2018"
+
+[dependencies]
+tokio = { version = "0.2", features = ["dns", "io-util"] }
+bytes = "0.5.4"
+
