@@ -12,13 +12,13 @@ use std::{
 
 use bytes::BufMut;
 use tokio::{
-    net::lookup_host,
-    io::{self, AsyncRead, AsyncReadExt},
+    net::{ToSocketAddrs, TcpStream, lookup_host},
+    io::{self, AsyncRead, AsyncReadExt, AsyncWriteExt},
 };
 
 const VERSION: u8 = 0x05;
 
-#[derive(PartialEq)]
+#[derive(Clone, PartialEq)]
 pub enum Method {
     None,
     GssApi,
@@ -73,9 +73,18 @@ impl Command {
             _ => None,
         }
     }
+
+    pub fn as_u8(&self) -> u8 {
+        match self {
+            Command::Connect => 0x01,
+            Command::Bind => 0x02,
+            Command::UdpAssociate => 0x03,
+            Command::LookupHost => 0x04,
+        }
+    }
 }
 
-#[derive(Clone)]
+#[derive(Clone, PartialEq, Debug)]
 pub enum Replies {
     Succeeded,
     GeneralFailure,
@@ -91,6 +100,21 @@ pub enum Replies {
 }
 
 impl Replies {
+    fn from_u8(code: u8) -> Replies {
+        match code {
+            0x00 => Replies::Succeeded,
+            0x01 => Replies::GeneralFailure,
+            0x02 => Replies::ConnectionNotAllowed,
+            0x03 => Replies::NetworkUnreachable,
+            0x04 => Replies::HostUnreachable,
+            0x05 => Replies::ConnectionRefused,
+            0x06 => Replies::TtlExpired,
+            0x07 => Replies::CommandNotSupported,
+            0x08 => Replies::AddressTypeNotSupported,
+            x => Replies::OtherReply(x),
+        }
+    }
+
     fn as_u8(&self) -> u8 {
         match self {
             Replies::Succeeded => 0x00,
@@ -165,6 +189,22 @@ impl AuthenticationRequest {
     pub fn required_authentication(&self) -> bool {
         !self.methods.contains(&Method::None)
     }
+
+    pub fn to_bytes(&self) -> Vec<u8> {
+        let mut buffer = Vec::new();
+        buffer.put_u8(VERSION);
+        buffer.put_u8(self.methods.len() as u8);
+        for i in &self.methods {
+            buffer.put_u8(i.as_u8());
+        }
+        buffer
+    }
+}
+
+impl From<Vec<Method>> for AuthenticationRequest {
+    fn from(methods: Vec<Method>) -> Self {
+        Self { methods }
+    }
 }
 
 /// SOCKS5 authentication response packet
@@ -181,6 +221,29 @@ pub struct AuthenticationResponse {
 }
 
 impl AuthenticationResponse {
+    pub async fn read_from<R>(r: &mut R) -> io::Result<AuthenticationResponse>
+    where
+        R: AsyncRead + Unpin,
+    {
+        let ver = r.read_u8().await?;
+        if ver != VERSION {
+            use std::io::{Error, ErrorKind};
+            let err = Error::new(
+                ErrorKind::InvalidData,
+                format!("unsupported socks version {:#x}", ver),
+            );
+            return Err(err);
+        }
+
+        let method = r.read_u8().await?;
+        let method = Method::from_u8(method);
+        Ok(AuthenticationResponse { method })
+    }
+
+    pub fn required_authentication(&self) -> bool {
+        self.method != Method::None
+    }
+
     pub fn to_bytes(&self) -> Vec<u8> {
         let mut buffer = Vec::new();
         buffer.put_u8(VERSION);
@@ -213,7 +276,10 @@ pub struct TcpRequestHeader {
 }
 
 impl TcpRequestHeader {
-    /// Read from a reader
+    pub fn new(command: Command, address: Address) -> Self {
+        Self { command, address }
+    }
+
     pub async fn read_from<R>(r: &mut R) -> Result<TcpRequestHeader, Error>
     where
         R: AsyncRead + Unpin,
@@ -242,6 +308,15 @@ impl TcpRequestHeader {
         let address = Address::read_from(r).await?;
         Ok(TcpRequestHeader { command, address })
     }
+
+    pub fn to_bytes(&self) -> Vec<u8> {
+        let mut buffer = Vec::with_capacity(3 + self.address.len());
+        buffer.put_u8(VERSION);
+        buffer.put_u8(self.command.as_u8());
+        buffer.put_u8(0);
+        buffer.put_slice(&self.address.to_bytes());
+        buffer
+    }
 }
 
 /// TCP response header
@@ -253,6 +328,7 @@ impl TcpRequestHeader {
 /// | 1  |  1  | X'00' |  1   | Variable |    2     |
 /// +----+-----+-------+------+----------+----------+
 /// ```
+#[derive(Debug)]
 pub struct TcpResponseHeader {
     /// SOCKS5 reply
     pub reply: Replies,
@@ -267,6 +343,31 @@ impl TcpResponseHeader {
             reply,
             address,
         }
+    }
+
+    pub async fn read_from<R>(r: &mut R) -> Result<TcpResponseHeader, Error>
+    where
+        R: AsyncRead + Unpin,
+    {
+        let ver = r.read_u8().await?;
+        if ver != VERSION {
+            return Err(Error::new(
+                Replies::ConnectionRefused,
+                format!("unsupported socks version {:#x}", ver),
+            ));
+        }
+
+        let reply = r.read_u8().await?;
+        let reply = Replies::from_u8(reply);
+        // skip RSV field
+        r.read_u8().await?;
+
+        let address = Address::read_from(r).await?;
+        Ok(TcpResponseHeader { reply, address })
+    }
+
+    pub fn is_success(&self) -> bool {
+        self.reply == Replies::Succeeded
     }
 
     pub fn to_bytes(&self) -> Vec<u8> {
@@ -388,8 +489,23 @@ impl Address {
     }
 }
 
+
 impl From<SocketAddr> for Address {
     fn from(s: SocketAddr) -> Address {
+        Address::SocketAddress(s)
+    }
+}
+
+impl From<SocketAddrV4> for Address {
+    fn from(s: SocketAddrV4) -> Address {
+        let s: SocketAddr = s.into();
+        Address::SocketAddress(s)
+    }
+}
+
+impl From<SocketAddrV6> for Address {
+    fn from(s: SocketAddrV6) -> Address {
+        let s: SocketAddr = s.into();
         Address::SocketAddress(s)
     }
 }
@@ -496,6 +612,27 @@ impl From<io::Error> for Error {
 impl From<Error> for io::Error {
     fn from(err: Error) -> io::Error {
         io::Error::new(io::ErrorKind::Other, err.message)
+    }
+}
+
+pub async fn connect_without_auth<A: ToSocketAddrs>(socks5_server_addr: A, dest_addr: SocketAddr) -> io::Result<TcpStream> {
+    let mut srv = TcpStream::connect(socks5_server_addr).await?;
+    // authentication
+    let auth_req: AuthenticationRequest = vec![Method::None; 1].into();
+    srv.write(&auth_req.to_bytes()).await?;
+    let auth_resp = AuthenticationResponse::read_from(&mut srv).await?;
+    if auth_resp.required_authentication() {
+        return Err(Error::new(Replies::GeneralFailure, "server does not support none password auth method").into());
+    }
+
+    // requests
+    let tcp_req = TcpRequestHeader::new(Command::Connect, dest_addr.into());
+    srv.write(&tcp_req.to_bytes()).await?;
+    let tcp_resp = TcpResponseHeader::read_from(&mut srv).await?;
+    if tcp_resp.is_success() {
+        Ok(srv)
+    } else {
+        Err(Error::new(Replies::GeneralFailure, "connection to socks5 server failed").into())
     }
 }
 
