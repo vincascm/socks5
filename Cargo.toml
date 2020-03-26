@@ -7,6 +7,6 @@ repository = "https://github.com/vincascm/socks5x"
 edition = "2018"
 
 [dependencies]
-tokio = { version = "0.2", features = ["dns", "io-util"] }
+tokio = { version = "0.2", features = ["tcp", "dns", "io-util"] }
 bytes = "0.5.4"
 
