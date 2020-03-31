@@ -1,4 +1,4 @@
 
-# socks5x
+# socks5
 
-a socks5 implement with host lookup.
+a socks5 implement

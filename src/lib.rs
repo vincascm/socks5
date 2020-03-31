@@ -3,7 +3,6 @@
 //! Implements [SOCKS Protocol Version 5](https://www.ietf.org/rfc/rfc1928) proxy protocol
 //! some reference from
 //! <https://github.com/shadowsocks/shadowsocks-rust/blob/master/src/relay/socks5.rs>
-//! socks5x add command lookup host
 
 use std::net::SocketAddr;
 
