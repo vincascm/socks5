@@ -1,9 +1,9 @@
 [package]
-name = "socks5x"
+name = "socks5"
 version = "0.1.0"
 authors = ["vinoca <vinoca@vinoca.org>"]
-description = "a socks5 protocol with extra command lookup_host"
-repository = "https://github.com/vincascm/socks5x"
+description = "a implement of socks5 protocol"
+repository = "https://github.com/vincascm/socks5"
 edition = "2018"
 
 [dependencies]

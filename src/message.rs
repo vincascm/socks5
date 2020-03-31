@@ -35,7 +35,6 @@ pub enum Command {
     Connect = 0x01,
     Bind = 0x02,
     UdpAssociate = 0x03,
-    LookupHost = 0x04,
 }
 
 impl TryFrom<u8> for Command {
@@ -46,7 +45,6 @@ impl TryFrom<u8> for Command {
             0x01 => Command::Connect,
             0x02 => Command::Bind,
             0x03 => Command::UdpAssociate,
-            0x04 => Command::LookupHost,
             c => {
                 return Err(Error::new(
                     Replies::GeneralFailure,
