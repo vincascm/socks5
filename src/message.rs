@@ -100,7 +100,6 @@ impl TryFrom<u8> for Replies {
     }
 }
 
-/*
 impl From<std::io::Error> for Replies {
     fn from(error: std::io::Error) -> Replies {
         use std::io::ErrorKind;
@@ -112,4 +111,3 @@ impl From<std::io::Error> for Replies {
         }
     }
 }
-*/
