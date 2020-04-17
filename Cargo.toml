@@ -9,4 +9,5 @@ edition = "2018"
 [dependencies]
 tokio = { version = "0.2", features = ["tcp", "dns", "io-util"] }
 bytes = "0.5.4"
+libc = "0.2.68"
 

@@ -1,6 +1,6 @@
 use std::{convert::TryFrom, fmt::Debug};
 
-use bytes::BufMut;
+use bytes::{BufMut, Bytes, BytesMut};
 use tokio::io::{self, AsyncRead, AsyncReadExt};
 
 use crate::{Address, Command, Error, Method, Replies, VERSION};
@@ -25,17 +25,16 @@ impl AuthenticationRequest {
     {
         let ver = r.read_u8().await?;
         if ver != VERSION {
-            use std::io::{Error, ErrorKind};
             let err = Error::new(
-                ErrorKind::InvalidData,
-                format!("unsupported socks version {:#x}", ver),
+                Replies::GeneralFailure,
+                format_args!("unsupported socks version {:#x}", ver),
             );
-            return Err(err);
+            return Err(err.into());
         }
 
         let n = r.read_u8().await?;
         let mut methods = Vec::new();
-        for _ in 0..n {
+        for _ in 0..(n as usize) {
             let method = r.read_u8().await?;
             let method = Method::try_from(method)?;
             methods.push(method);
@@ -47,14 +46,14 @@ impl AuthenticationRequest {
         !self.methods.contains(&Method::NONE)
     }
 
-    pub fn to_bytes(&self) -> Vec<u8> {
-        let mut buffer = Vec::new();
+    pub fn to_bytes(&self) -> Bytes {
+        let mut buffer = BytesMut::new();
         buffer.put_u8(VERSION);
         buffer.put_u8(self.methods.len() as u8);
         for i in &self.methods {
             buffer.put_u8(*i as u8);
         }
-        buffer
+        buffer.freeze()
     }
 }
 
@@ -84,12 +83,11 @@ impl AuthenticationResponse {
     {
         let ver = r.read_u8().await?;
         if ver != VERSION {
-            use std::io::{Error, ErrorKind};
             let err = Error::new(
-                ErrorKind::InvalidData,
-                format!("unsupported socks version {:#x}", ver),
+                Replies::GeneralFailure,
+                format_args!("unsupported socks version {:#x}", ver),
             );
-            return Err(err);
+            return Err(err.into());
         }
 
         let method = r.read_u8().await?;
@@ -101,11 +99,11 @@ impl AuthenticationResponse {
         self.method != Method::NONE
     }
 
-    pub fn to_bytes(&self) -> Vec<u8> {
-        let mut buffer = Vec::new();
+    pub fn to_bytes(&self) -> Bytes {
+        let mut buffer = BytesMut::new();
         buffer.put_u8(VERSION);
         buffer.put_u8(self.method as u8);
-        buffer
+        buffer.freeze()
     }
 }
 
@@ -144,7 +142,7 @@ impl TcpRequestHeader {
         if ver != VERSION {
             return Err(Error::new(
                 Replies::ConnectionRefused,
-                format!("unsupported socks version {:#x}", ver),
+                format_args!("unsupported socks version {:#x}", ver),
             ));
         }
 
@@ -165,13 +163,13 @@ impl TcpRequestHeader {
         self.command
     }
 
-    pub fn to_bytes(&self) -> Vec<u8> {
-        let mut buffer = Vec::with_capacity(3 + self.address.len());
+    pub fn to_bytes(&self) -> Bytes {
+        let mut buffer = BytesMut::with_capacity(3 + self.address.len());
         buffer.put_u8(VERSION);
         buffer.put_u8(self.command as u8);
         buffer.put_u8(0);
         buffer.put_slice(&self.address.to_bytes());
-        buffer
+        buffer.freeze()
     }
 }
 
@@ -206,7 +204,7 @@ impl TcpResponseHeader {
         if ver != VERSION {
             return Err(Error::new(
                 Replies::ConnectionRefused,
-                format!("unsupported socks version {:#x}", ver),
+                format_args!("unsupported socks version {:#x}", ver),
             ));
         }
 
@@ -223,12 +221,12 @@ impl TcpResponseHeader {
         self.reply == Replies::Succeeded
     }
 
-    pub fn to_bytes(&self) -> Vec<u8> {
-        let mut buffer = Vec::with_capacity(3 + self.address.len());
+    pub fn to_bytes(&self) -> Bytes {
+        let mut buffer = BytesMut::with_capacity(3 + self.address.len());
         buffer.put_u8(VERSION);
         buffer.put_u8(self.reply as u8);
         buffer.put_u8(0);
         buffer.put_slice(&self.address.to_bytes());
-        buffer
+        buffer.freeze()
     }
 }

@@ -4,7 +4,7 @@ use std::{
     net::{Ipv4Addr, Ipv6Addr, SocketAddr, SocketAddrV4, SocketAddrV6},
 };
 
-use bytes::BufMut;
+use bytes::{BufMut, Bytes, BytesMut};
 use tokio::{
     io::{self, AsyncRead, AsyncReadExt},
     net::lookup_host,
@@ -62,8 +62,8 @@ impl Address {
         }
     }
 
-    pub fn to_bytes(&self) -> Vec<u8> {
-        let mut buffer = Vec::with_capacity(self.len());
+    pub fn to_bytes(&self) -> Bytes {
+        let mut buffer = BytesMut::with_capacity(self.len());
         match self {
             Address::SocketAddress(addr) => match addr {
                 SocketAddr::V4(addr) => {
@@ -86,10 +86,10 @@ impl Address {
                 buffer.put_u16(*port);
             }
         }
-        buffer
+        buffer.freeze()
     }
 
-    pub fn len(&self) -> usize {
+    pub(crate) fn len(&self) -> usize {
         match self {
             // VER + addr len + port len
             Address::SocketAddress(SocketAddr::V4(..)) => 1 + 4 + 2,
@@ -151,7 +151,7 @@ impl TryFrom<u8> for AddressType {
             c => {
                 return Err(Error::new(
                     Replies::GeneralFailure,
-                    format!("unsupported address type {:#x}", c),
+                    format_args!("unsupported address type {:#x}", c),
                 ))
             }
         };

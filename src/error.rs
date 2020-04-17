@@ -9,10 +9,10 @@ pub struct Error {
 }
 
 impl Error {
-    pub fn new<S: Into<String>>(reply: crate::Replies, message: S) -> Error {
+    pub fn new<S: ToString>(reply: crate::Replies, message: S) -> Error {
         Error {
             reply,
-            message: message.into(),
+            message: message.to_string(),
         }
     }
 }
@@ -37,8 +37,8 @@ impl From<std::io::Error> for Error {
     }
 }
 
-impl From<Error> for std::io::Error {
-    fn from(err: Error) -> std::io::Error {
-        std::io::Error::new(std::io::ErrorKind::Other, err.message)
+impl From<Error> for tokio::io::Error {
+    fn from(err: Error) -> tokio::io::Error {
+        tokio::io::Error::new(tokio::io::ErrorKind::Other, err.message)
     }
 }

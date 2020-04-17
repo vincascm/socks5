@@ -22,7 +22,7 @@ impl TryFrom<u8> for Method {
             c => {
                 return Err(Error::new(
                     Replies::GeneralFailure,
-                    format!("unsupported method {:#x}", c),
+                    format_args!("unsupported method {:#x}", c),
                 ))
             }
         };
@@ -48,7 +48,7 @@ impl TryFrom<u8> for Command {
             c => {
                 return Err(Error::new(
                     Replies::GeneralFailure,
-                    format!("unsupported command {:#x}", c),
+                    format_args!("unsupported command {:#x}", c),
                 ))
             }
         };
@@ -92,7 +92,7 @@ impl TryFrom<u8> for Replies {
             c => {
                 return Err(Error::new(
                     Replies::GeneralFailure,
-                    format!("unsupported reply {:#x}", c),
+                    format_args!("unsupported reply {:#x}", c),
                 ))
             }
         };
@@ -100,6 +100,7 @@ impl TryFrom<u8> for Replies {
     }
 }
 
+/*
 impl From<std::io::Error> for Replies {
     fn from(error: std::io::Error) -> Replies {
         use std::io::ErrorKind;
@@ -111,3 +112,4 @@ impl From<std::io::Error> for Replies {
         }
     }
 }
+*/
