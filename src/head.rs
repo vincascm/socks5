@@ -1,7 +1,8 @@
-use std::{convert::TryFrom, fmt::Debug};
+use std::{convert::TryFrom, fmt::Debug, net::TcpStream};
 
 use bytes::{BufMut, Bytes, BytesMut};
-use tokio::io::{self, AsyncRead, AsyncReadExt};
+use futures::io::AsyncReadExt;
+use smol::Async;
 
 use crate::{Address, Command, Error, Method, Replies, VERSION};
 
@@ -19,23 +20,26 @@ pub struct AuthenticationRequest {
 }
 
 impl AuthenticationRequest {
-    pub async fn read_from<R>(r: &mut R) -> io::Result<AuthenticationRequest>
-    where
-        R: AsyncRead + Unpin,
-    {
-        let ver = r.read_u8().await?;
+    pub async fn read_from(stream: &mut Async<TcpStream>) -> Result<AuthenticationRequest, Error> {
+        let mut buf = [0; 257];
+        stream.read(&mut buf).await?;
+
+        let ver = buf[0];
+
+        //let ver = r.read_u8().await?;
         if ver != VERSION {
-            let err = Error::new(
-                Replies::GeneralFailure,
+            return Err(Error::new(
+                Replies::ConnectionRefused,
                 format_args!("unsupported socks version {:#x}", ver),
-            );
-            return Err(err.into());
+            ));
         }
 
-        let n = r.read_u8().await?;
+        //let n = r.read_u8().await?;
+        let n = buf[1] as usize;
         let mut methods = Vec::new();
-        for _ in 0..(n as usize) {
-            let method = r.read_u8().await?;
+        for i in 0..n {
+            //let method = r.read_u8().await?;
+            let method = buf[2 + i];
             let method = Method::try_from(method)?;
             methods.push(method);
         }
@@ -77,20 +81,18 @@ pub struct AuthenticationResponse {
 }
 
 impl AuthenticationResponse {
-    pub async fn read_from<R>(r: &mut R) -> io::Result<AuthenticationResponse>
-    where
-        R: AsyncRead + Unpin,
-    {
-        let ver = r.read_u8().await?;
+    pub async fn read_from(stream: &mut Async<TcpStream>) -> Result<AuthenticationResponse, Error> {
+        let mut buf = [0; 2];
+        stream.read(&mut buf).await?;
+        let ver = buf[0];
         if ver != VERSION {
-            let err = Error::new(
-                Replies::GeneralFailure,
+            return Err(Error::new(
+                Replies::ConnectionRefused,
                 format_args!("unsupported socks version {:#x}", ver),
-            );
-            return Err(err.into());
+            ));
         }
 
-        let method = r.read_u8().await?;
+        let method = buf[1];
         let method = Method::try_from(method)?;
         Ok(AuthenticationResponse { method })
     }
@@ -134,11 +136,10 @@ impl TcpRequestHeader {
         Self { command, address }
     }
 
-    pub async fn read_from<R>(r: &mut R) -> Result<TcpRequestHeader, Error>
-    where
-        R: AsyncRead + Unpin,
-    {
-        let ver = r.read_u8().await?;
+    pub async fn read_from(stream: &mut Async<TcpStream>) -> Result<TcpRequestHeader, Error> {
+        let mut buf = [0; 259];
+        stream.read(&mut buf).await?;
+        let ver = buf[0];
         if ver != VERSION {
             return Err(Error::new(
                 Replies::ConnectionRefused,
@@ -146,12 +147,10 @@ impl TcpRequestHeader {
             ));
         }
 
-        let command = r.read_u8().await?;
+        let command = buf[1];
         let command = Command::try_from(command)?;
-        // skip RSV field
-        r.read_u8().await?;
 
-        let address = Address::read_from(r).await?;
+        let address = Address::read_from(&buf[3..]).await?;
         Ok(TcpRequestHeader { command, address })
     }
 
@@ -196,11 +195,10 @@ impl TcpResponseHeader {
         TcpResponseHeader { reply, address }
     }
 
-    pub async fn read_from<R>(r: &mut R) -> Result<TcpResponseHeader, Error>
-    where
-        R: AsyncRead + Unpin,
-    {
-        let ver = r.read_u8().await?;
+    pub async fn read_from(stream: &mut Async<TcpStream>) -> Result<TcpResponseHeader, Error> {
+        let mut buf = [0; 259];
+        stream.read(&mut buf).await?;
+        let ver = buf[0];
         if ver != VERSION {
             return Err(Error::new(
                 Replies::ConnectionRefused,
@@ -208,12 +206,10 @@ impl TcpResponseHeader {
             ));
         }
 
-        let reply = r.read_u8().await?;
+        let reply = buf[1];
         let reply = Replies::try_from(reply)?;
-        // skip RSV field
-        r.read_u8().await?;
 
-        let address = Address::read_from(r).await?;
+        let address = Address::read_from(&buf[3..]).await?;
         Ok(TcpResponseHeader { reply, address })
     }
 

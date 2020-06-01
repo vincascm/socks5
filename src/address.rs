@@ -1,14 +1,10 @@
 use std::{
-    convert::TryFrom,
+    convert::{TryFrom, TryInto},
     fmt::Debug,
-    net::{Ipv4Addr, Ipv6Addr, SocketAddr, SocketAddrV4, SocketAddrV6},
+    net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr, SocketAddrV4, SocketAddrV6},
 };
 
 use bytes::{BufMut, Bytes, BytesMut};
-use tokio::{
-    io::{self, AsyncRead, AsyncReadExt},
-    net::lookup_host,
-};
 
 use crate::{Error, Replies};
 
@@ -22,41 +18,41 @@ pub enum Address {
 }
 
 impl Address {
-    pub async fn read_from<R>(stream: &mut R) -> Result<Address, Error>
-    where
-        R: AsyncRead + Unpin,
-    {
-        let addr_type = stream.read_u8().await?;
-        let addr_type = AddressType::try_from(addr_type)?;
+    pub async fn read_from(buf: &[u8]) -> Result<Address, Error> {
+        let addr_type = AddressType::try_from(buf[0])?;
+
         match addr_type {
             AddressType::Ipv4 => {
-                let v4addr: Ipv4Addr = stream.read_u32().await?.into();
-                let port = stream.read_u16().await?;
+                let v4addr: [u8; 4] = buf[1..=4].try_into()?;
+                let v4addr: Ipv4Addr = v4addr.into();
+                let port: [u8; 2] = buf[5..=6].try_into()?;
+                let port = u16::from_be_bytes(port);
                 Ok(Address::SocketAddress(SocketAddr::V4(SocketAddrV4::new(
                     v4addr, port,
                 ))))
             }
             AddressType::Ipv6 => {
-                let v6addr: Ipv6Addr = stream.read_u128().await?.into();
-                let port = stream.read_u16().await?;
+                let v6addr: [u8; 16] = buf[1..=16].try_into()?;
+                let v6addr: Ipv6Addr = v6addr.into();
+                let port: [u8; 2] = buf[17..=18].try_into()?;
+                let port = u16::from_be_bytes(port);
                 Ok(Address::SocketAddress(SocketAddr::V6(SocketAddrV6::new(
                     v6addr, port, 0, 0,
                 ))))
             }
             AddressType::DomainName => {
-                let domain_len = stream.read_u8().await? as usize;
-                let mut domain = vec![0; domain_len];
-                stream.read_exact(&mut domain).await?;
-                let domain = match String::from_utf8(domain.to_vec()) {
+                let domain_len = buf[1] as usize;
+                let domain = match String::from_utf8(buf[2..2 + domain_len].to_vec()) {
                     Ok(domain) => domain,
                     Err(_) => {
                         return Err(Error::new(
                             Replies::GeneralFailure,
-                            "invalid address encoding",
+                            format_args!("invalid address encoding"),
                         ))
                     }
                 };
-                let port = stream.read_u16().await?;
+                let port: [u8; 2] = buf[2 + domain_len..=2 + domain_len + 2].try_into()?;
+                let port = u16::from_be_bytes(port);
                 Ok(Address::DomainNameAddress(domain, port))
             }
         }
@@ -100,14 +96,12 @@ impl Address {
         }
     }
 
-    pub async fn to_socket_addrs(&self) -> io::Result<SocketAddr> {
+    pub async fn to_socket_addrs(&self) -> Result<SocketAddr, Error> {
         match self {
             Address::SocketAddress(addr) => Ok(*addr),
             Address::DomainNameAddress(addr, port) => {
-                match lookup_host((addr.as_str(), *port)).await?.next() {
-                    Some(addr) => Ok(addr),
-                    None => Err(io::ErrorKind::AddrNotAvailable.into()),
-                }
+                let host: IpAddr = addr.parse()?;
+                Ok((host, *port).into())
             }
         }
     }
@@ -150,7 +144,7 @@ impl TryFrom<u8> for AddressType {
             4 => AddressType::Ipv6,
             c => {
                 return Err(Error::new(
-                    Replies::GeneralFailure,
+                    Replies::AddressTypeNotSupported,
                     format_args!("unsupported address type {:#x}", c),
                 ))
             }

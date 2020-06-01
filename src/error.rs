@@ -1,4 +1,8 @@
-use std::fmt::{Debug, Display, Formatter, Result};
+use std::{
+    array::TryFromSliceError,
+    fmt::{Debug, Display, Formatter, Result},
+    net::AddrParseError,
+};
 
 #[derive(Clone)]
 pub struct Error {
@@ -29,16 +33,22 @@ impl Display for Error {
     }
 }
 
+impl From<TryFromSliceError> for Error {
+    fn from(err: TryFromSliceError) -> Error {
+        Error::new(crate::Replies::GeneralFailure, err.to_string())
+    }
+}
+
+impl From<AddrParseError> for Error {
+    fn from(err: AddrParseError) -> Error {
+        Error::new(crate::Replies::GeneralFailure, err.to_string())
+    }
+}
+
 impl std::error::Error for Error {}
 
 impl From<std::io::Error> for Error {
     fn from(err: std::io::Error) -> Error {
         Error::new(crate::Replies::GeneralFailure, err.to_string())
-    }
-}
-
-impl From<Error> for tokio::io::Error {
-    fn from(err: Error) -> tokio::io::Error {
-        tokio::io::Error::new(tokio::io::ErrorKind::Other, err.message)
     }
 }

@@ -1,20 +1,21 @@
-use std::net::SocketAddr;
-
-use tokio::{
-    io::{self, AsyncWriteExt},
-    net::{TcpStream, ToSocketAddrs},
+use std::{
+    fmt::Display,
+    net::{SocketAddr, TcpStream, ToSocketAddrs},
 };
+
+use futures::io::AsyncWriteExt;
+use smol::Async;
 
 use crate::{
     AuthenticationRequest, AuthenticationResponse, Command, Error, Method, Replies,
     TcpRequestHeader, TcpResponseHeader,
 };
 
-pub async fn connect_without_auth<A: ToSocketAddrs>(
+pub async fn connect_without_auth<A: Display + ToSocketAddrs>(
     socks5_server_addr: A,
     dest_addr: SocketAddr,
-) -> io::Result<TcpStream> {
-    let mut srv = TcpStream::connect(socks5_server_addr).await?;
+) -> Result<Async<TcpStream>, Error> {
+    let mut srv = Async::<TcpStream>::connect(socks5_server_addr).await?;
     // authentication
     let auth_req: AuthenticationRequest = vec![Method::NONE; 1].into();
     srv.write(&auth_req.to_bytes()).await?;
@@ -23,8 +24,7 @@ pub async fn connect_without_auth<A: ToSocketAddrs>(
         return Err(Error::new(
             Replies::GeneralFailure,
             "server does not support none password auth method",
-        )
-        .into());
+        ));
     }
 
     // requests
