@@ -97,11 +97,11 @@ impl Address {
         }
     }
 
-    pub async fn to_socket_addrs(&self) -> Result<SocketAddr, Error> {
+    pub async fn to_socket_addrs(self) -> Result<SocketAddr, Error> {
         Ok(match self {
-            Address::SocketAddress(addr) => *addr,
+            Address::SocketAddress(addr) => addr,
             Address::DomainNameAddress(addr, port) => {
-                let mut addr = (addr.as_str(), *port).to_socket_addrs()?;
+                let mut addr = smol::blocking!((addr.as_str(), port).to_socket_addrs())?;
                 addr.next().ok_or_else(||Error::new(
                     Replies::GeneralFailure,
                     format_args!("domain resolving failed"),
