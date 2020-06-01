@@ -1,7 +1,7 @@
 use std::{
     convert::{TryFrom, TryInto},
     fmt::Debug,
-    net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr, SocketAddrV4, SocketAddrV6},
+    net::{Ipv4Addr, Ipv6Addr, SocketAddr, SocketAddrV4, SocketAddrV6, ToSocketAddrs},
 };
 
 use bytes::{BufMut, Bytes, BytesMut};
@@ -42,7 +42,8 @@ impl Address {
             }
             AddressType::DomainName => {
                 let domain_len = buf[1] as usize;
-                let domain = match String::from_utf8(buf[2..2 + domain_len].to_vec()) {
+                let domain_end = 2 + domain_len;
+                let domain = match String::from_utf8(buf[2..domain_end].to_vec()) {
                     Ok(domain) => domain,
                     Err(_) => {
                         return Err(Error::new(
@@ -51,7 +52,7 @@ impl Address {
                         ))
                     }
                 };
-                let port: [u8; 2] = buf[2 + domain_len..=2 + domain_len + 2].try_into()?;
+                let port: [u8; 2] = buf[domain_end..domain_end + 2].try_into()?;
                 let port = u16::from_be_bytes(port);
                 Ok(Address::DomainNameAddress(domain, port))
             }
@@ -97,13 +98,16 @@ impl Address {
     }
 
     pub async fn to_socket_addrs(&self) -> Result<SocketAddr, Error> {
-        match self {
-            Address::SocketAddress(addr) => Ok(*addr),
+        Ok(match self {
+            Address::SocketAddress(addr) => *addr,
             Address::DomainNameAddress(addr, port) => {
-                let host: IpAddr = addr.parse()?;
-                Ok((host, *port).into())
+                let mut addr = (addr.as_str(), *port).to_socket_addrs()?;
+                addr.next().ok_or_else(||Error::new(
+                    Replies::GeneralFailure,
+                    format_args!("domain resolving failed"),
+                ))?
             }
-        }
+        })
     }
 }
 

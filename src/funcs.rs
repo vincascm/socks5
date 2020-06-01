@@ -37,7 +37,6 @@ pub async fn connect_without_auth<A: Display + ToSocketAddrs>(
         Err(Error::new(
             Replies::GeneralFailure,
             "connection to socks5 server failed",
-        )
-        .into())
+        ))
     }
 }
