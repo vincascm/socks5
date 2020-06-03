@@ -18,7 +18,7 @@ pub enum Address {
 }
 
 impl Address {
-    pub async fn read_from(buf: &[u8]) -> Result<Address, Error> {
+    pub fn from_bytes(buf: &[u8]) -> Result<Address, Error> {
         let addr_type = AddressType::try_from(buf[0])?;
 
         match addr_type {

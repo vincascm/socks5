@@ -24,21 +24,16 @@ impl AuthenticationRequest {
         let mut buf = [0; 257];
         stream.read(&mut buf).await?;
 
-        let ver = buf[0];
-
-        //let ver = r.read_u8().await?;
-        if ver != VERSION {
+        if buf[0] != VERSION {
             return Err(Error::new(
                 Replies::ConnectionRefused,
-                format_args!("unsupported socks version {:#x}", ver),
+                format_args!("unsupported socks version {:#x}", buf[0]),
             ));
         }
 
-        //let n = r.read_u8().await?;
         let n = buf[1] as usize;
         let mut methods = Vec::new();
         for i in 0..n {
-            //let method = r.read_u8().await?;
             let method = buf[2 + i];
             let method = Method::try_from(method)?;
             methods.push(method);
@@ -84,16 +79,14 @@ impl AuthenticationResponse {
     pub async fn read_from(stream: &mut Async<TcpStream>) -> Result<AuthenticationResponse, Error> {
         let mut buf = [0; 2];
         stream.read(&mut buf).await?;
-        let ver = buf[0];
-        if ver != VERSION {
+        if buf[0] != VERSION {
             return Err(Error::new(
                 Replies::ConnectionRefused,
-                format_args!("unsupported socks version {:#x}", ver),
+                format_args!("unsupported socks version {:#x}", buf[0]),
             ));
         }
 
-        let method = buf[1];
-        let method = Method::try_from(method)?;
+        let method = Method::try_from(buf[1])?;
         Ok(AuthenticationResponse { method })
     }
 
@@ -139,18 +132,15 @@ impl TcpRequestHeader {
     pub async fn read_from(stream: &mut Async<TcpStream>) -> Result<TcpRequestHeader, Error> {
         let mut buf = [0; 259];
         stream.read(&mut buf).await?;
-        let ver = buf[0];
-        if ver != VERSION {
+        if buf[0] != VERSION {
             return Err(Error::new(
                 Replies::ConnectionRefused,
-                format_args!("unsupported socks version {:#x}", ver),
+                format_args!("unsupported socks version {:#x}", buf[0]),
             ));
         }
 
-        let command = buf[1];
-        let command = Command::try_from(command)?;
-
-        let address = Address::read_from(&buf[3..]).await?;
+        let command = Command::try_from(buf[1])?;
+        let address = Address::from_bytes(&buf[3..])?;
         Ok(TcpRequestHeader { command, address })
     }
 
@@ -198,18 +188,15 @@ impl TcpResponseHeader {
     pub async fn read_from(stream: &mut Async<TcpStream>) -> Result<TcpResponseHeader, Error> {
         let mut buf = [0; 259];
         stream.read(&mut buf).await?;
-        let ver = buf[0];
-        if ver != VERSION {
+        if buf[0] != VERSION {
             return Err(Error::new(
                 Replies::ConnectionRefused,
-                format_args!("unsupported socks version {:#x}", ver),
+                format_args!("unsupported socks version {:#x}", buf[0]),
             ));
         }
 
-        let reply = buf[1];
-        let reply = Replies::try_from(reply)?;
-
-        let address = Address::read_from(&buf[3..]).await?;
+        let reply = Replies::try_from(buf[1])?;
+        let address = Address::from_bytes(&buf[3..])?;
         Ok(TcpResponseHeader { reply, address })
     }
 
