@@ -48,7 +48,7 @@ impl Address {
                     Err(_) => {
                         return Err(Error::new(
                             Replies::GeneralFailure,
-                            format_args!("invalid address encoding"),
+                            "invalid address encoding",
                         ))
                     }
                 };
@@ -96,19 +96,6 @@ impl Address {
             Address::DomainNameAddress(ref d, _) => 1 + 1 + d.len() + 2,
         }
     }
-
-    pub async fn to_socket_addrs(self) -> Result<SocketAddr, Error> {
-        Ok(match self {
-            Address::SocketAddress(addr) => addr,
-            Address::DomainNameAddress(addr, port) => {
-                let mut addr = smol::blocking!((addr.as_str(), port).to_socket_addrs())?;
-                addr.next().ok_or_else(||Error::new(
-                    Replies::GeneralFailure,
-                    format_args!("domain resolving failed"),
-                ))?
-            }
-        })
-    }
 }
 
 impl From<SocketAddr> for Address {
@@ -131,6 +118,21 @@ impl From<SocketAddrV6> for Address {
     }
 }
 
+impl TryInto<SocketAddr> for Address {
+    type Error = Error;
+
+    fn try_into(self) -> Result<SocketAddr, Self::Error> {
+        Ok(match self {
+            Address::SocketAddress(addr) => addr,
+            Address::DomainNameAddress(addr, port) => {
+                let mut addr = (addr.as_str(), port).to_socket_addrs()?;
+                addr.next()
+                    .ok_or_else(|| Error::new(Replies::GeneralFailure, "domain resolving failed"))?
+            }
+        })
+    }
+}
+
 #[derive(Copy, Clone)]
 enum AddressType {
     Ipv4 = 1,
@@ -149,7 +151,7 @@ impl TryFrom<u8> for AddressType {
             c => {
                 return Err(Error::new(
                     Replies::AddressTypeNotSupported,
-                    format_args!("unsupported address type {:#x}", c),
+                    format!("unsupported address type {:#x}", c),
                 ))
             }
         };

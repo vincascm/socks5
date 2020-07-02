@@ -18,7 +18,8 @@ pub async fn connect_without_auth<A: Display + ToSocketAddrs>(
     let mut srv = Async::<TcpStream>::connect(socks5_server_addr).await?;
     // authentication
     let auth_req: AuthenticationRequest = vec![Method::NONE; 1].into();
-    srv.write(&auth_req.to_bytes()).await?;
+    srv.write_all(&auth_req.to_bytes()).await?;
+    srv.flush().await?;
     let auth_resp = AuthenticationResponse::read_from(&mut srv).await?;
     if auth_resp.required_authentication() {
         return Err(Error::new(
@@ -29,7 +30,8 @@ pub async fn connect_without_auth<A: Display + ToSocketAddrs>(
 
     // requests
     let tcp_req = TcpRequestHeader::new(Command::Connect, dest_addr.into());
-    srv.write(&tcp_req.to_bytes()).await?;
+    srv.write_all(&tcp_req.to_bytes()).await?;
+    srv.flush().await?;
     let tcp_resp = TcpResponseHeader::read_from(&mut srv).await?;
     if tcp_resp.is_success() {
         Ok(srv)
