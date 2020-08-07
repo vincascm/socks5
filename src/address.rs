@@ -12,9 +12,9 @@ use crate::{Error, Replies};
 #[derive(Clone, Debug, PartialEq)]
 pub enum Address {
     /// Socket address (IP Address)
-    SocketAddress(SocketAddr),
+    Socket(SocketAddr),
     /// Domain name address
-    DomainNameAddress(String, u16),
+    DomainName(String, u16),
 }
 
 impl Address {
@@ -27,7 +27,7 @@ impl Address {
                 let v4addr: Ipv4Addr = v4addr.into();
                 let port: [u8; 2] = buf[5..=6].try_into()?;
                 let port = u16::from_be_bytes(port);
-                Ok(Address::SocketAddress(SocketAddr::V4(SocketAddrV4::new(
+                Ok(Address::Socket(SocketAddr::V4(SocketAddrV4::new(
                     v4addr, port,
                 ))))
             }
@@ -36,7 +36,7 @@ impl Address {
                 let v6addr: Ipv6Addr = v6addr.into();
                 let port: [u8; 2] = buf[17..=18].try_into()?;
                 let port = u16::from_be_bytes(port);
-                Ok(Address::SocketAddress(SocketAddr::V6(SocketAddrV6::new(
+                Ok(Address::Socket(SocketAddr::V6(SocketAddrV6::new(
                     v6addr, port, 0, 0,
                 ))))
             }
@@ -54,7 +54,7 @@ impl Address {
                 };
                 let port: [u8; 2] = buf[domain_end..domain_end + 2].try_into()?;
                 let port = u16::from_be_bytes(port);
-                Ok(Address::DomainNameAddress(domain, port))
+                Ok(Address::DomainName(domain, port))
             }
         }
     }
@@ -62,7 +62,7 @@ impl Address {
     pub fn to_bytes(&self) -> Bytes {
         let mut buffer = BytesMut::with_capacity(self.len());
         match self {
-            Address::SocketAddress(addr) => match addr {
+            Address::Socket(addr) => match addr {
                 SocketAddr::V4(addr) => {
                     buffer.put_u8(AddressType::Ipv4 as u8);
                     buffer.put_slice(&addr.ip().octets());
@@ -76,7 +76,7 @@ impl Address {
                     buffer.put_u16(addr.port());
                 }
             },
-            Address::DomainNameAddress(dnaddr, port) => {
+            Address::DomainName(dnaddr, port) => {
                 buffer.put_u8(AddressType::DomainName as u8);
                 buffer.put_u8(dnaddr.len() as u8);
                 buffer.put_slice(dnaddr[..].as_bytes());
@@ -89,32 +89,32 @@ impl Address {
     pub(crate) fn len(&self) -> usize {
         match self {
             // VER + addr len + port len
-            Address::SocketAddress(SocketAddr::V4(..)) => 1 + 4 + 2,
+            Address::Socket(SocketAddr::V4(..)) => 1 + 4 + 2,
             // VER + addr len + port len
-            Address::SocketAddress(SocketAddr::V6(..)) => 1 + 8 * 2 + 2,
+            Address::Socket(SocketAddr::V6(..)) => 1 + 8 * 2 + 2,
             // VER + domain len + domain self len + port len
-            Address::DomainNameAddress(ref d, _) => 1 + 1 + d.len() + 2,
+            Address::DomainName(ref d, _) => 1 + 1 + d.len() + 2,
         }
     }
 }
 
 impl From<SocketAddr> for Address {
     fn from(s: SocketAddr) -> Address {
-        Address::SocketAddress(s)
+        Address::Socket(s)
     }
 }
 
 impl From<SocketAddrV4> for Address {
     fn from(s: SocketAddrV4) -> Address {
         let s: SocketAddr = s.into();
-        Address::SocketAddress(s)
+        Address::Socket(s)
     }
 }
 
 impl From<SocketAddrV6> for Address {
     fn from(s: SocketAddrV6) -> Address {
         let s: SocketAddr = s.into();
-        Address::SocketAddress(s)
+        Address::Socket(s)
     }
 }
 
@@ -122,14 +122,15 @@ impl TryInto<SocketAddr> for Address {
     type Error = Error;
 
     fn try_into(self) -> Result<SocketAddr, Self::Error> {
-        Ok(match self {
-            Address::SocketAddress(addr) => addr,
-            Address::DomainNameAddress(addr, port) => {
+        let addr = match self {
+            Address::Socket(addr) => addr,
+            Address::DomainName(addr, port) => {
                 let mut addr = (addr.as_str(), port).to_socket_addrs()?;
                 addr.next()
                     .ok_or_else(|| Error::new(Replies::GeneralFailure, "domain resolving failed"))?
             }
-        })
+        };
+        Ok(addr)
     }
 }
 

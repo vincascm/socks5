@@ -1,19 +1,19 @@
 use std::{
     fmt::Display,
-    net::{SocketAddr, TcpStream, ToSocketAddrs},
+    net::{TcpStream, ToSocketAddrs},
 };
 
 use futures::io::AsyncWriteExt;
 use smol::Async;
 
 use crate::{
-    AuthenticationRequest, AuthenticationResponse, Command, Error, Method, Replies,
+    Address, AuthenticationRequest, AuthenticationResponse, Command, Error, Method, Replies,
     TcpRequestHeader, TcpResponseHeader,
 };
 
 pub async fn connect_without_auth<A: Display + ToSocketAddrs>(
     socks5_server_addr: A,
-    dest_addr: SocketAddr,
+    dest_addr: Address,
 ) -> Result<Async<TcpStream>, Error> {
     let mut srv = Async::<TcpStream>::connect(socks5_server_addr).await?;
     // authentication
@@ -29,7 +29,7 @@ pub async fn connect_without_auth<A: Display + ToSocketAddrs>(
     }
 
     // requests
-    let tcp_req = TcpRequestHeader::new(Command::Connect, dest_addr.into());
+    let tcp_req = TcpRequestHeader::new(Command::Connect, dest_addr);
     srv.write_all(&tcp_req.to_bytes()).await?;
     srv.flush().await?;
     let tcp_resp = TcpResponseHeader::read_from(&mut srv).await?;
