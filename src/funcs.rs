@@ -1,7 +1,4 @@
-use std::{
-    fmt::Display,
-    net::{TcpStream, ToSocketAddrs},
-};
+use std::net::{SocketAddr, TcpStream};
 
 use futures::io::AsyncWriteExt;
 use smol::Async;
@@ -11,7 +8,7 @@ use crate::{
     TcpRequestHeader, TcpResponseHeader,
 };
 
-pub async fn connect_without_auth<A: Display + ToSocketAddrs>(
+pub async fn connect_without_auth<A: Into<SocketAddr>>(
     socks5_server_addr: A,
     dest_addr: Address,
 ) -> Result<Async<TcpStream>, Error> {

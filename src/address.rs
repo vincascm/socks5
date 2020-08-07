@@ -118,6 +118,12 @@ impl From<SocketAddrV6> for Address {
     }
 }
 
+impl From<(String, u16)> for Address {
+    fn from((host, port): (String, u16)) -> Address {
+        Address::DomainName(host, port)
+    }
+}
+
 impl TryInto<SocketAddr> for Address {
     type Error = Error;
 
