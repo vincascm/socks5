@@ -33,9 +33,6 @@ pub async fn connect_without_auth<A: Into<SocketAddr>>(
     if tcp_resp.is_success() {
         Ok(srv)
     } else {
-        Err(Error::new(
-            Replies::GeneralFailure,
-            "connection to socks5 server failed",
-        ))
+        Err(tcp_resp.reply.into())
     }
 }

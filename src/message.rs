@@ -111,3 +111,20 @@ impl From<std::io::Error> for Replies {
         }
     }
 }
+
+impl Into<Error> for Replies {
+    fn into(self) -> Error {
+        let message = match &self {
+            Replies::Succeeded => "succeeded",
+            Replies::GeneralFailure => "general failure",
+            Replies::ConnectionNotAllowed => "connection not allowed",
+            Replies::NetworkUnreachable => "network unreachable",
+            Replies::HostUnreachable => "host unreachable",
+            Replies::ConnectionRefused => "connection refused",
+            Replies::TtlExpired => "TTL expired",
+            Replies::CommandNotSupported => "command not supported",
+            Replies::AddressTypeNotSupported => "address type not supported",
+        };
+        Error::new(self, message)
+    }
+}

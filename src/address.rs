@@ -132,8 +132,9 @@ impl TryInto<SocketAddr> for Address {
             Address::Socket(addr) => addr,
             Address::DomainName(addr, port) => {
                 let mut addr = (addr.as_str(), port).to_socket_addrs()?;
-                addr.next()
-                    .ok_or_else(|| Error::new(Replies::GeneralFailure, "domain resolving failed"))?
+                addr.next().ok_or_else(|| {
+                    Error::new(Replies::HostUnreachable, "domain resolving failed")
+                })?
             }
         };
         Ok(addr)
