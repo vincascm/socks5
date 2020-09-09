@@ -1,8 +1,7 @@
-use std::{convert::TryFrom, fmt::Debug, net::TcpStream};
+use std::{convert::TryFrom, fmt::Debug};
 
 use bytes::{BufMut, Bytes, BytesMut};
-use futures::io::AsyncReadExt;
-use smol::Async;
+use smol::{io::AsyncReadExt, net::TcpStream};
 
 use crate::{Address, Command, Error, Method, Replies, VERSION};
 
@@ -20,7 +19,7 @@ pub struct AuthenticationRequest {
 }
 
 impl AuthenticationRequest {
-    pub async fn read_from(stream: &mut Async<TcpStream>) -> Result<AuthenticationRequest, Error> {
+    pub async fn read_from(stream: &mut TcpStream) -> Result<AuthenticationRequest, Error> {
         let mut buf = [0; 257];
         stream.read(&mut buf).await?;
         check_version(buf[0])?;
@@ -69,7 +68,7 @@ pub struct AuthenticationResponse {
 }
 
 impl AuthenticationResponse {
-    pub async fn read_from(stream: &mut Async<TcpStream>) -> Result<AuthenticationResponse, Error> {
+    pub async fn read_from(stream: &mut TcpStream) -> Result<AuthenticationResponse, Error> {
         let mut buf = [0; 2];
         stream.read(&mut buf).await?;
         check_version(buf[0])?;
@@ -116,7 +115,7 @@ impl TcpRequestHeader {
         Self { command, address }
     }
 
-    pub async fn read_from(stream: &mut Async<TcpStream>) -> Result<TcpRequestHeader, Error> {
+    pub async fn read_from(stream: &mut TcpStream) -> Result<TcpRequestHeader, Error> {
         let mut buf = [0; 259];
         stream.read(&mut buf).await?;
         check_version(buf[0])?;
@@ -166,7 +165,7 @@ impl TcpResponseHeader {
         TcpResponseHeader { reply, address }
     }
 
-    pub async fn read_from(stream: &mut Async<TcpStream>) -> Result<TcpResponseHeader, Error> {
+    pub async fn read_from(stream: &mut TcpStream) -> Result<TcpResponseHeader, Error> {
         let mut buf = [0; 259];
         stream.read(&mut buf).await?;
         check_version(buf[0])?;
