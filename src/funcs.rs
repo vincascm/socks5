@@ -1,18 +1,17 @@
-use smol::{
-    io::AsyncWriteExt,
-    net::{AsyncToSocketAddrs, TcpStream},
-};
+use std::net::{SocketAddr, TcpStream};
+
+use smol::{io::AsyncWriteExt, Async};
 
 use crate::{
     Address, AuthenticationRequest, AuthenticationResponse, Command, Error, Method, Replies,
     TcpRequestHeader, TcpResponseHeader,
 };
 
-pub async fn connect_without_auth<A: AsyncToSocketAddrs>(
+pub async fn connect_without_auth<A: Into<SocketAddr>>(
     socks5_server_addr: A,
     dest_addr: Address,
-) -> Result<TcpStream, Error> {
-    let mut srv = TcpStream::connect(socks5_server_addr).await?;
+) -> Result<Async<TcpStream>, Error> {
+    let mut srv = Async::<TcpStream>::connect(socks5_server_addr).await?;
     // authentication
     let auth_req: AuthenticationRequest = vec![Method::NONE; 1].into();
     srv.write_all(&auth_req.to_bytes()).await?;
