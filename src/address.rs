@@ -1,11 +1,10 @@
 use std::{
     convert::{TryFrom, TryInto},
     fmt::Debug,
-    //net::{Ipv4Addr, Ipv6Addr, SocketAddr, SocketAddrV4, SocketAddrV6, ToSocketAddrs},
+    net::{Ipv4Addr, Ipv6Addr, SocketAddr, SocketAddrV4, SocketAddrV6, ToSocketAddrs},
 };
 
 use bytes::{BufMut, Bytes, BytesMut};
-use smol::net::{resolve, Ipv4Addr, Ipv6Addr, SocketAddr, SocketAddrV4, SocketAddrV6};
 
 use crate::{Error, Replies};
 
@@ -97,23 +96,6 @@ impl Address {
             Address::DomainName(ref d, _) => 1 + 1 + d.len() + 2,
         }
     }
-
-    pub async fn to_socket_addr(&self) -> Result<SocketAddr, Error> {
-        match self {
-            Address::Socket(addr) => Ok(*addr),
-            Address::DomainName(addr, port) => {
-                let e = Error::new(Replies::HostUnreachable, "domain resolving failed");
-                let mut addrs = resolve((addr.as_str(), *port))
-                    .await
-                    .map_err(|_| e.clone())?;
-                if addrs.is_empty() {
-                    Err(e)
-                } else {
-                    Ok(addrs.remove(0))
-                }
-            }
-        }
-    }
 }
 
 impl From<SocketAddr> for Address {
@@ -141,6 +123,24 @@ impl From<(String, u16)> for Address {
         Address::DomainName(host, port)
     }
 }
+
+impl TryInto<SocketAddr> for Address {
+    type Error = Error;
+
+    fn try_into(self) -> Result<SocketAddr, Self::Error> {
+        let addr = match self {
+            Address::Socket(addr) => addr,
+            Address::DomainName(addr, port) => {
+                let mut addr = (addr.as_str(), port).to_socket_addrs()?;
+                addr.next().ok_or_else(|| {
+                    Error::new(Replies::HostUnreachable, "domain resolving failed")
+                })?
+            }
+        };
+        Ok(addr)
+    }
+}
+
 
 #[derive(Copy, Clone)]
 enum AddressType {
