@@ -141,7 +141,6 @@ impl TryInto<SocketAddr> for Address {
     }
 }
 
-
 #[derive(Copy, Clone)]
 enum AddressType {
     Ipv4 = 1,

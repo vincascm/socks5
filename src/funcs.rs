@@ -1,22 +1,20 @@
-use std::net::{SocketAddr, TcpStream};
-
-use smol::{io::AsyncWriteExt, Async};
+use futures::{AsyncRead, AsyncWrite, AsyncWriteExt};
 
 use crate::{
     Address, AuthenticationRequest, AuthenticationResponse, Command, Error, Method, Replies,
     TcpRequestHeader, TcpResponseHeader,
 };
 
-pub async fn connect_without_auth<A: Into<SocketAddr>>(
-    socks5_server_addr: A,
+pub async fn connect_without_auth<T: AsyncRead + AsyncWrite + Unpin>(
+    socks5_server_connect: &mut T,
     dest_addr: Address,
-) -> Result<Async<TcpStream>, Error> {
-    let mut srv = Async::<TcpStream>::connect(socks5_server_addr).await?;
+) -> Result<(), Error> {
+    let mut c = socks5_server_connect;
     // authentication
     let auth_req: AuthenticationRequest = vec![Method::NONE; 1].into();
-    srv.write_all(&auth_req.to_bytes()).await?;
-    srv.flush().await?;
-    let auth_resp = AuthenticationResponse::read_from(&mut srv).await?;
+    c.write_all(&auth_req.to_bytes()).await?;
+    c.flush().await?;
+    let auth_resp = AuthenticationResponse::read_from(&mut c).await?;
     if auth_resp.required_authentication() {
         return Err(Error::new(
             Replies::GeneralFailure,
@@ -26,11 +24,11 @@ pub async fn connect_without_auth<A: Into<SocketAddr>>(
 
     // requests
     let tcp_req = TcpRequestHeader::new(Command::Connect, dest_addr);
-    srv.write_all(&tcp_req.to_bytes()).await?;
-    srv.flush().await?;
-    let tcp_resp = TcpResponseHeader::read_from(&mut srv).await?;
+    c.write_all(&tcp_req.to_bytes()).await?;
+    c.flush().await?;
+    let tcp_resp = TcpResponseHeader::read_from(&mut c).await?;
     if tcp_resp.is_success() {
-        Ok(srv)
+        Ok(())
     } else {
         Err(tcp_resp.reply.into())
     }

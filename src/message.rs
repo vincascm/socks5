@@ -112,9 +112,9 @@ impl From<std::io::Error> for Replies {
     }
 }
 
-impl Into<Error> for Replies {
-    fn into(self) -> Error {
-        let message = match &self {
+impl From<Replies> for Error {
+    fn from(reply: Replies) -> Error {
+        let message = match reply {
             Replies::Succeeded => "succeeded",
             Replies::GeneralFailure => "general failure",
             Replies::ConnectionNotAllowed => "connection not allowed",
@@ -125,6 +125,6 @@ impl Into<Error> for Replies {
             Replies::CommandNotSupported => "command not supported",
             Replies::AddressTypeNotSupported => "address type not supported",
         };
-        Error::new(self, message)
+        Error::new(reply, message)
     }
 }
