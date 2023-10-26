@@ -1,6 +1,6 @@
 [package]
 name = "socks5"
-version = "0.4.0"
+version = "0.4.1"
 authors = ["vinoca <vinoca@vinoca.org>"]
 description = "a implement of socks5 protocol"
 repository = "https://github.com/vincascm/socks5"
@@ -8,5 +8,4 @@ edition = "2021"
 
 [dependencies]
 bytes = "1.5.0"
-#futures-io = "0.3.28"
-futures-util = { version = "0.3.28", default-features = false, features = ["io"] }
+futures-lite = "2.0.0"
