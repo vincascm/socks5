@@ -1,4 +1,4 @@
-use futures_util::{AsyncRead, AsyncWrite, AsyncWriteExt};
+use futures_lite::{AsyncRead, AsyncWrite, AsyncWriteExt};
 
 use crate::{
     Address, AuthenticationRequest, AuthenticationResponse, Command, Error, Method, Replies,

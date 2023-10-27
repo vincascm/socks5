@@ -1,7 +1,7 @@
 use core::convert::TryFrom;
 
 use bytes::{BufMut, Bytes, BytesMut};
-use futures_util::{AsyncRead, AsyncReadExt};
+use futures_lite::{AsyncRead, AsyncReadExt};
 use tinyvec::ArrayVec;
 
 use crate::{Address, Command, Error, Method, Replies, VERSION};

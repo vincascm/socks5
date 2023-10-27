@@ -8,5 +8,5 @@ edition = "2021"
 
 [dependencies]
 bytes = "1.5.0"
-futures-util = { version = "0.3.29", default-features = false, features = [ "io" ] }
+futures-lite = "2.0.0"
 tinyvec = "1.6.0"
