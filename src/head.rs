@@ -1,7 +1,8 @@
-use std::convert::TryFrom;
+use core::convert::TryFrom;
 
 use bytes::{BufMut, Bytes, BytesMut};
 use futures_util::{AsyncRead, AsyncReadExt};
+use tinyvec::ArrayVec;
 
 use crate::{Address, Command, Error, Method, Replies, VERSION};
 
@@ -15,7 +16,7 @@ use crate::{Address, Command, Error, Method, Replies, VERSION};
 /// +----+----------+----------|
 /// ```
 pub struct AuthenticationRequest {
-    methods: Vec<Method>,
+    methods: ArrayVec<[Method; 256]>,
 }
 
 impl AuthenticationRequest {
@@ -26,7 +27,7 @@ impl AuthenticationRequest {
         stream.read(&mut buf).await?;
         check_version(buf[0])?;
         let n = buf[1] as usize;
-        let mut methods = Vec::new();
+        let mut methods = ArrayVec::new();
         for i in 0..n {
             let method = buf[2 + i];
             let method = Method::try_from(method)?;
@@ -50,8 +51,10 @@ impl AuthenticationRequest {
     }
 }
 
-impl From<Vec<Method>> for AuthenticationRequest {
-    fn from(methods: Vec<Method>) -> Self {
+impl<'a> From<&'a [Method]> for AuthenticationRequest {
+    fn from(m: &'a [Method]) -> Self {
+        let mut methods = ArrayVec::new();
+        methods.extend_from_slice(m);
         Self { methods }
     }
 }
@@ -139,7 +142,7 @@ impl TcpRequestHeader {
     }
 
     pub fn to_bytes(&self) -> Bytes {
-        let mut buffer = BytesMut::with_capacity(3 + self.address.length());
+        let mut buffer = BytesMut::with_capacity(3 + self.address.size_hint());
         buffer.put_u8(VERSION);
         buffer.put_u8(self.command as u8);
         buffer.put_u8(0);
@@ -187,7 +190,7 @@ impl TcpResponseHeader {
     }
 
     pub fn to_bytes(&self) -> Bytes {
-        let mut buffer = BytesMut::with_capacity(3 + self.address.length());
+        let mut buffer = BytesMut::with_capacity(3 + self.address.size_hint());
         buffer.put_u8(VERSION);
         buffer.put_u8(self.reply as u8);
         buffer.put_u8(0);

@@ -6,6 +6,7 @@ use std::{
 };
 
 use bytes::{BufMut, Bytes, BytesMut};
+use tinyvec::ArrayVec;
 
 use crate::{Error, Replies};
 
@@ -15,7 +16,7 @@ pub enum Address {
     /// Socket address
     Socket(SocketAddr),
     /// Domain name address
-    DomainName(String, u16),
+    DomainName(ArrayVec<[u8; 2048]>, u16),
 }
 
 impl Address {
@@ -44,15 +45,8 @@ impl Address {
             AddressType::DomainName => {
                 let domain_len = buf[1] as usize;
                 let domain_end = 2 + domain_len;
-                let domain = match String::from_utf8(buf[2..domain_end].to_vec()) {
-                    Ok(domain) => domain,
-                    Err(_) => {
-                        return Err(Error::new(
-                            Replies::GeneralFailure,
-                            "invalid address encoding",
-                        ))
-                    }
-                };
+                let mut domain = ArrayVec::new();
+                domain.extend_from_slice(&buf[2..domain_end]);
                 let port: [u8; 2] = buf[domain_end..domain_end + 2].try_into()?;
                 let port = u16::from_be_bytes(port);
                 Ok(Address::DomainName(domain, port))
@@ -61,7 +55,7 @@ impl Address {
     }
 
     pub fn to_bytes(&self) -> Bytes {
-        let mut buffer = BytesMut::with_capacity(self.length());
+        let mut buffer = BytesMut::with_capacity(self.size_hint());
         match self {
             Address::Socket(addr) => match addr {
                 SocketAddr::V4(addr) => {
@@ -80,14 +74,14 @@ impl Address {
             Address::DomainName(dnaddr, port) => {
                 buffer.put_u8(AddressType::DomainName as u8);
                 buffer.put_u8(dnaddr.len() as u8);
-                buffer.put_slice(dnaddr[..].as_bytes());
+                buffer.put_slice(dnaddr);
                 buffer.put_u16(*port);
             }
         }
         buffer.freeze()
     }
 
-    pub(crate) fn length(&self) -> usize {
+    pub(crate) fn size_hint(&self) -> usize {
         let type_length = match &self {
             // addr len + port len
             Address::Socket(SocketAddr::V4(..)) => 4 + 2,
@@ -102,7 +96,7 @@ impl Address {
 
     pub async fn lookup<'a, F, T, E>(&'a self, f: F) -> Result<SocketAddr, Error>
     where
-        F: Fn(&'a str) -> T,
+        F: Fn(&'a [u8]) -> T,
         T: Future<Output = Result<IpAddr, E>>,
         E: Display,
     {
@@ -142,9 +136,12 @@ impl From<SocketAddrV6> for Address {
     }
 }
 
-impl<T: Into<String>> From<(T, u16)> for Address {
+impl<'a, T: Into<&'a [u8]>> From<(T, u16)> for Address {
     fn from((host, port): (T, u16)) -> Address {
-        Address::DomainName(host.into(), port)
+        let s = host.into();
+        let mut domain = ArrayVec::new();
+        domain.extend_from_slice(s);
+        Address::DomainName(domain, port)
     }
 }
 

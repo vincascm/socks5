@@ -1,9 +1,10 @@
-use std::{convert::TryFrom, fmt::Debug};
+use core::{convert::TryFrom, fmt::Debug};
 
 use crate::{Address, Error, TcpResponseHeader};
 
-#[derive(Copy, Clone, PartialEq)]
+#[derive(Default, Copy, Clone, PartialEq)]
 pub enum Method {
+    #[default]
     NONE = 0x00,
     GSSAPI = 0x01,
     PASSWORD = 0x02,

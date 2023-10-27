@@ -11,7 +11,7 @@ pub async fn connect_without_auth<T: AsyncRead + AsyncWrite + Unpin>(
 ) -> Result<(), Error> {
     let mut c = socks5_server_connect;
     // authentication
-    let auth_req: AuthenticationRequest = vec![Method::NONE; 1].into();
+    let auth_req: AuthenticationRequest = [Method::NONE; 1].as_slice().into();
     c.write_all(&auth_req.to_bytes()).await?;
     c.flush().await?;
     let auth_resp = AuthenticationResponse::read_from(&mut c).await?;
