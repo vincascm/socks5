@@ -1,7 +1,8 @@
 use std::{
     convert::{TryFrom, TryInto},
     fmt::Debug,
-    net::{Ipv4Addr, Ipv6Addr, SocketAddr, SocketAddrV4, SocketAddrV6, ToSocketAddrs},
+    future::Future,
+    net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr, SocketAddrV4, SocketAddrV6},
 };
 
 use bytes::{BufMut, Bytes, BytesMut};
@@ -11,7 +12,7 @@ use crate::{Error, Replies};
 /// SOCKS5 address type
 #[derive(Clone, Debug, PartialEq)]
 pub enum Address {
-    /// Socket address (IP Address)
+    /// Socket address
     Socket(SocketAddr),
     /// Domain name address
     DomainName(String, u16),
@@ -60,7 +61,7 @@ impl Address {
     }
 
     pub fn to_bytes(&self) -> Bytes {
-        let mut buffer = BytesMut::with_capacity(self.len());
+        let mut buffer = BytesMut::with_capacity(self.length());
         match self {
             Address::Socket(addr) => match addr {
                 SocketAddr::V4(addr) => {
@@ -86,15 +87,35 @@ impl Address {
         buffer.freeze()
     }
 
-    pub(crate) fn len(&self) -> usize {
-        match self {
-            // VER + addr len + port len
-            Address::Socket(SocketAddr::V4(..)) => 1 + 4 + 2,
-            // VER + addr len + port len
-            Address::Socket(SocketAddr::V6(..)) => 1 + 8 * 2 + 2,
-            // VER + domain len + domain self len + port len
-            Address::DomainName(ref d, _) => 1 + 1 + d.len() + 2,
-        }
+    pub(crate) fn length(&self) -> usize {
+        let type_length = match self {
+            // addr len + port len
+            Address::Socket(SocketAddr::V4(..)) => 4 + 2,
+            // addr len + port len
+            Address::Socket(SocketAddr::V6(..)) => 8 * 2 + 2,
+            // domain len + domain self len + port len
+            Address::DomainName(ref d, _) => 1 + d.len() + 2,
+        };
+        // add 1 version byte length
+        1 + type_length
+    }
+
+    pub async fn lookup<F, T, E>(&self, f: F) -> Result<SocketAddr, Error>
+    where
+        F: FnOnce(&str) -> T,
+        T: Future<Output = Result<IpAddr, E>>,
+        E: std::error::Error,
+    {
+        let addr = match self {
+            Address::Socket(addr) => *addr,
+            Address::DomainName(addr, port) => {
+                let addr = f(&addr)
+                    .await
+                    .map_err(|_| Error::new(Replies::HostUnreachable, "domain resolving failed"))?;
+                (addr, *port).into()
+            }
+        };
+        Ok(addr)
     }
 }
 
@@ -118,26 +139,9 @@ impl From<SocketAddrV6> for Address {
     }
 }
 
-impl From<(String, u16)> for Address {
-    fn from((host, port): (String, u16)) -> Address {
-        Address::DomainName(host, port)
-    }
-}
-
-impl TryInto<SocketAddr> for Address {
-    type Error = Error;
-
-    fn try_into(self) -> Result<SocketAddr, Self::Error> {
-        let addr = match self {
-            Address::Socket(addr) => addr,
-            Address::DomainName(addr, port) => {
-                let mut addr = (addr.as_str(), port).to_socket_addrs()?;
-                addr.next().ok_or_else(|| {
-                    Error::new(Replies::HostUnreachable, "domain resolving failed")
-                })?
-            }
-        };
-        Ok(addr)
+impl<T: Into<String>> From<(T, u16)> for Address {
+    fn from((host, port): (T, u16)) -> Address {
+        Address::DomainName(host.into(), port)
     }
 }
 

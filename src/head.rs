@@ -139,7 +139,7 @@ impl TcpRequestHeader {
     }
 
     pub fn to_bytes(&self) -> Bytes {
-        let mut buffer = BytesMut::with_capacity(3 + self.address.len());
+        let mut buffer = BytesMut::with_capacity(3 + self.address.length());
         buffer.put_u8(VERSION);
         buffer.put_u8(self.command as u8);
         buffer.put_u8(0);
@@ -187,7 +187,7 @@ impl TcpResponseHeader {
     }
 
     pub fn to_bytes(&self) -> Bytes {
-        let mut buffer = BytesMut::with_capacity(3 + self.address.len());
+        let mut buffer = BytesMut::with_capacity(3 + self.address.length());
         buffer.put_u8(VERSION);
         buffer.put_u8(self.reply as u8);
         buffer.put_u8(0);
