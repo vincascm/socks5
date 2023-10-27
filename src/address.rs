@@ -1,6 +1,6 @@
 use std::{
     convert::{TryFrom, TryInto},
-    fmt::Debug,
+    fmt::{Debug, Display},
     future::Future,
     net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr, SocketAddrV4, SocketAddrV6},
 };
@@ -88,13 +88,13 @@ impl Address {
     }
 
     pub(crate) fn length(&self) -> usize {
-        let type_length = match self {
+        let type_length = match &self {
             // addr len + port len
             Address::Socket(SocketAddr::V4(..)) => 4 + 2,
             // addr len + port len
             Address::Socket(SocketAddr::V6(..)) => 8 * 2 + 2,
             // domain len + domain self len + port len
-            Address::DomainName(ref d, _) => 1 + d.len() + 2,
+            Address::DomainName(d, _) => 1 + d.len() + 2,
         };
         // add 1 version byte length
         1 + type_length
@@ -104,7 +104,7 @@ impl Address {
     where
         F: FnOnce(&str) -> T,
         T: Future<Output = Result<IpAddr, E>>,
-        E: std::error::Error,
+        E: Display,
     {
         let addr = match self {
             Address::Socket(addr) => *addr,
