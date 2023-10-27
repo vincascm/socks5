@@ -100,18 +100,21 @@ impl Address {
         1 + type_length
     }
 
-    pub async fn lookup<F, T, E>(&self, f: F) -> Result<SocketAddr, Error>
+    pub async fn lookup<'a, F, T, E>(&'a self, f: F) -> Result<SocketAddr, Error>
     where
-        F: FnOnce(&str) -> T,
+        F: Fn(&'a str) -> T,
         T: Future<Output = Result<IpAddr, E>>,
         E: Display,
     {
         let addr = match self {
             Address::Socket(addr) => *addr,
-            Address::DomainName(addr, port) => {
-                let addr = f(&addr)
-                    .await
-                    .map_err(|_| Error::new(Replies::HostUnreachable, "domain resolving failed"))?;
+            Address::DomainName(name, port) => {
+                let addr = f(name).await.map_err(|e| {
+                    Error::new(
+                        Replies::HostUnreachable,
+                        format!("domain \"{name}\" resolving failed: {e}"),
+                    )
+                })?;
                 (addr, *port).into()
             }
         };
