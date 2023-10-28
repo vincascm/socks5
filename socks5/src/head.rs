@@ -1,48 +1,45 @@
 use core::convert::TryFrom;
 
 use bytes::{BufMut, Bytes, BytesMut};
-use futures_lite::{AsyncRead, AsyncReadExt};
+use futures_lite::AsyncReadExt;
 use tinyvec::ArrayVec;
 
-use crate::{Address, Command, Error, Method, Replies, VERSION};
+use crate::{
+    address::Address,
+    error::Result,
+    message::{Command, Method, Replies},
+    ser::{Decode, Encode},
+};
 
 /// SOCKS5 authentication request packet
-///
-/// ```plain
-/// +----+----------+----------+
-/// |VER | NMETHODS | METHODS  |
-/// +----+----------+----------+
-/// | 5  |    1     | 1 to 255 |
-/// +----+----------+----------|
-/// ```
+#[derive(Debug)]
 pub struct AuthenticationRequest {
     methods: ArrayVec<[Method; 256]>,
 }
 
 impl AuthenticationRequest {
-    pub async fn read_from<T: AsyncRead + Unpin>(
-        stream: &mut T,
-    ) -> Result<AuthenticationRequest, Error> {
-        let mut buf = [0; 257];
-        stream.read(&mut buf).await?;
-        check_version(buf[0])?;
-        let n = buf[1] as usize;
+    pub fn required_authentication(&self) -> bool {
+        !self.methods.contains(&Method::NONE)
+    }
+}
+
+impl<T: AsyncReadExt + Unpin> Decode<T> for AuthenticationRequest {
+    async fn decode(r: &mut T) -> Result<Self> {
+        let n = Self::read_u8(r).await? as usize;
+        let mut buf = vec![0; n * Method::size_hint()];
+        r.read_exact(&mut buf).await?;
         let mut methods = ArrayVec::new();
-        for i in 0..n {
-            let method = buf[2 + i];
-            let method = Method::try_from(method)?;
+        for i in buf {
+            let method = Method::try_from(i)?;
             methods.push(method);
         }
         Ok(AuthenticationRequest { methods })
     }
+}
 
-    pub fn required_authentication(&self) -> bool {
-        !self.methods.contains(&Method::NONE)
-    }
-
-    pub fn to_bytes(&self) -> Bytes {
+impl Encode for AuthenticationRequest {
+    fn encode(&self) -> Bytes {
         let mut buffer = BytesMut::new();
-        buffer.put_u8(VERSION);
         buffer.put_u8(self.methods.len() as u8);
         for i in &self.methods {
             buffer.put_u8(*i as u8);
@@ -60,36 +57,27 @@ impl<'a> From<&'a [Method]> for AuthenticationRequest {
 }
 
 /// SOCKS5 authentication response packet
-///
-/// ```plain
-/// +----+--------+
-/// |VER | METHOD |
-/// +----+--------+
-/// | 1  |   1    |
-/// +----+--------+
-/// ```
 pub struct AuthenticationResponse {
     method: Method,
 }
 
 impl AuthenticationResponse {
-    pub async fn read_from<T: AsyncRead + Unpin>(
-        stream: &mut T,
-    ) -> Result<AuthenticationResponse, Error> {
-        let mut buf = [0; 2];
-        stream.read(&mut buf).await?;
-        check_version(buf[0])?;
-        let method = Method::try_from(buf[1])?;
-        Ok(AuthenticationResponse { method })
-    }
-
     pub fn required_authentication(&self) -> bool {
         self.method != Method::NONE
     }
+}
 
-    pub fn to_bytes(&self) -> Bytes {
+impl<T: AsyncReadExt + Unpin> Decode<T> for AuthenticationResponse {
+    async fn decode(r: &mut T) -> Result<Self> {
+        let method = Self::read_u8(r).await?;
+        let method = Method::try_from(method)?;
+        Ok(AuthenticationResponse { method })
+    }
+}
+
+impl Encode for AuthenticationResponse {
+    fn encode(&self) -> Bytes {
         let mut buffer = BytesMut::new();
-        buffer.put_u8(VERSION);
         buffer.put_u8(self.method as u8);
         buffer.freeze()
     }
@@ -122,17 +110,6 @@ impl TcpRequestHeader {
         Self { command, address }
     }
 
-    pub async fn read_from<T: AsyncRead + Unpin>(
-        stream: &mut T,
-    ) -> Result<TcpRequestHeader, Error> {
-        let mut buf = [0; 259];
-        stream.read(&mut buf).await?;
-        check_version(buf[0])?;
-        let command = Command::try_from(buf[1])?;
-        let address = Address::from_bytes(&buf[3..])?;
-        Ok(TcpRequestHeader { command, address })
-    }
-
     pub fn address(&self) -> &Address {
         &self.address
     }
@@ -140,13 +117,24 @@ impl TcpRequestHeader {
     pub fn command(&self) -> Command {
         self.command
     }
+}
 
-    pub fn to_bytes(&self) -> Bytes {
-        let mut buffer = BytesMut::with_capacity(3 + self.address.size_hint());
-        buffer.put_u8(VERSION);
+impl<T: AsyncReadExt + Unpin> Decode<T> for TcpRequestHeader {
+    async fn decode(r: &mut T) -> Result<Self> {
+        let command = Self::read_u8(r).await?;
+        let command = Command::try_from(command)?;
+        Self::read_u8(r).await?;
+        let address = Address::decode(r).await?;
+        Ok(TcpRequestHeader { command, address })
+    }
+}
+
+impl Encode for TcpRequestHeader {
+    fn encode(&self) -> Bytes {
+        let mut buffer = BytesMut::new();
         buffer.put_u8(self.command as u8);
         buffer.put_u8(0);
-        buffer.put_slice(&self.address.to_bytes());
+        buffer.put_slice(&self.address.encode());
         buffer.freeze()
     }
 }
@@ -174,38 +162,27 @@ impl TcpResponseHeader {
         TcpResponseHeader { reply, address }
     }
 
-    pub async fn read_from<T: AsyncRead + Unpin>(
-        stream: &mut T,
-    ) -> Result<TcpResponseHeader, Error> {
-        let mut buf = [0; 259];
-        stream.read(&mut buf).await?;
-        check_version(buf[0])?;
-        let reply = Replies::try_from(buf[1])?;
-        let address = Address::from_bytes(&buf[3..])?;
-        Ok(TcpResponseHeader { reply, address })
-    }
-
     pub fn is_success(&self) -> bool {
         self.reply == Replies::Succeeded
     }
+}
 
-    pub fn to_bytes(&self) -> Bytes {
-        let mut buffer = BytesMut::with_capacity(3 + self.address.size_hint());
-        buffer.put_u8(VERSION);
-        buffer.put_u8(self.reply as u8);
-        buffer.put_u8(0);
-        buffer.put_slice(&self.address.to_bytes());
-        buffer.freeze()
+impl<T: AsyncReadExt + Unpin> Decode<T> for TcpResponseHeader {
+    async fn decode(r: &mut T) -> Result<Self> {
+        let reply = Self::read_u8(r).await?;
+        let reply = Replies::try_from(reply)?;
+        Self::read_u8(r).await?;
+        let address = Address::decode(r).await?;
+        Ok(TcpResponseHeader { reply, address })
     }
 }
 
-fn check_version(v: u8) -> Result<(), Error> {
-    if v == VERSION {
-        Ok(())
-    } else {
-        Err(Error::new(
-            Replies::ConnectionRefused,
-            format!("unsupported socks version {:#x}", v),
-        ))
+impl Encode for TcpResponseHeader {
+    fn encode(&self) -> Bytes {
+        let mut buffer = BytesMut::new();
+        buffer.put_u8(self.reply as u8);
+        buffer.put_u8(0);
+        buffer.put_slice(&self.address.encode());
+        buffer.freeze()
     }
 }

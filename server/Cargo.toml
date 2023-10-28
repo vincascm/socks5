@@ -1,0 +1,11 @@
+[package]
+name = "socks5-server"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+anyhow.workspace = true
+async-dns.workspace = true
+async-io.workspace = true
+futures-lite.workspace = true
+socks5.workspace = true

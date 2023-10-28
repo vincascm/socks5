@@ -2,13 +2,18 @@ use std::{
     convert::{TryFrom, TryInto},
     fmt::{Debug, Display},
     future::Future,
-    net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr, SocketAddrV4, SocketAddrV6},
+    net::{Ipv4Addr, Ipv6Addr, SocketAddr, SocketAddrV4, SocketAddrV6},
 };
 
 use bytes::{BufMut, Bytes, BytesMut};
+use futures_lite::AsyncReadExt;
 use tinyvec::ArrayVec;
 
-use crate::{Error, Replies};
+use crate::{
+    error::Error,
+    message::Replies,
+    ser::{Decode, Encode},
+};
 
 /// SOCKS5 address type
 #[derive(Clone, Debug, PartialEq)]
@@ -16,15 +21,38 @@ pub enum Address {
     /// Socket address
     Socket(SocketAddr),
     /// Domain name address
-    DomainName(ArrayVec<[u8; 2048]>, u16),
+    DomainName(Box<ArrayVec<[u8; 2048]>>, u16),
 }
 
 impl Address {
-    pub fn from_bytes(buf: &[u8]) -> Result<Address, Error> {
-        let addr_type = AddressType::try_from(buf[0])?;
+    pub async fn lookup<'a, F, T, E>(&'a self, f: F) -> Result<SocketAddr, Error>
+    where
+        F: Fn(&'a [u8], u16) -> T,
+        T: Future<Output = Result<SocketAddr, E>>,
+        E: Display,
+    {
+        let addr = match self {
+            Address::Socket(addr) => *addr,
+            Address::DomainName(name, port) => f(name, *port).await.map_err(|e| {
+                Error::new(
+                    Replies::HostUnreachable,
+                    format!("domain \"{name}\" resolving failed: {e}"),
+                )
+            })?,
+        };
+        Ok(addr)
+    }
+}
+
+impl<T: AsyncReadExt + Unpin> Decode<T> for Address {
+    async fn decode(r: &mut T) -> crate::error::Result<Self> {
+        let addr_type = Self::read_u8(r).await?;
+        let addr_type = AddressType::try_from(addr_type)?;
 
         match addr_type {
             AddressType::Ipv4 => {
+                let mut buf = vec![0; 6];
+                r.read_exact(&mut buf).await?;
                 let v4addr: [u8; 4] = buf[1..=4].try_into()?;
                 let v4addr: Ipv4Addr = v4addr.into();
                 let port: [u8; 2] = buf[5..=6].try_into()?;
@@ -34,6 +62,8 @@ impl Address {
                 ))))
             }
             AddressType::Ipv6 => {
+                let mut buf = vec![0; 18];
+                r.read_exact(&mut buf).await?;
                 let v6addr: [u8; 16] = buf[1..=16].try_into()?;
                 let v6addr: Ipv6Addr = v6addr.into();
                 let port: [u8; 2] = buf[17..=18].try_into()?;
@@ -43,19 +73,22 @@ impl Address {
                 ))))
             }
             AddressType::DomainName => {
-                let domain_len = buf[1] as usize;
-                let domain_end = 2 + domain_len;
+                let domain_len = Self::read_u8(r).await? as usize;
+                let mut buf = vec![0; domain_len + 2];
+                r.read_exact(&mut buf).await?;
                 let mut domain = ArrayVec::new();
-                domain.extend_from_slice(&buf[2..domain_end]);
-                let port: [u8; 2] = buf[domain_end..domain_end + 2].try_into()?;
+                domain.extend_from_slice(&buf[..domain_len]);
+                let port: [u8; 2] = buf[domain_len..domain_len + 2].try_into()?;
                 let port = u16::from_be_bytes(port);
-                Ok(Address::DomainName(domain, port))
+                Ok(Address::DomainName(Box::new(domain), port))
             }
         }
     }
+}
 
-    pub fn to_bytes(&self) -> Bytes {
-        let mut buffer = BytesMut::with_capacity(self.size_hint());
+impl Encode for Address {
+    fn encode(&self) -> Bytes {
+        let mut buffer = BytesMut::new();
         match self {
             Address::Socket(addr) => match addr {
                 SocketAddr::V4(addr) => {
@@ -79,40 +112,6 @@ impl Address {
             }
         }
         buffer.freeze()
-    }
-
-    pub(crate) fn size_hint(&self) -> usize {
-        let type_length = match &self {
-            // addr len + port len
-            Address::Socket(SocketAddr::V4(..)) => 4 + 2,
-            // addr len + port len
-            Address::Socket(SocketAddr::V6(..)) => 8 * 2 + 2,
-            // domain len + domain self len + port len
-            Address::DomainName(d, _) => 1 + d.len() + 2,
-        };
-        // add 1 version byte length
-        1 + type_length
-    }
-
-    pub async fn lookup<'a, F, T, E>(&'a self, f: F) -> Result<SocketAddr, Error>
-    where
-        F: Fn(&'a [u8]) -> T,
-        T: Future<Output = Result<IpAddr, E>>,
-        E: Display,
-    {
-        let addr = match self {
-            Address::Socket(addr) => *addr,
-            Address::DomainName(name, port) => {
-                let addr = f(name).await.map_err(|e| {
-                    Error::new(
-                        Replies::HostUnreachable,
-                        format!("domain \"{name}\" resolving failed: {e}"),
-                    )
-                })?;
-                (addr, *port).into()
-            }
-        };
-        Ok(addr)
     }
 }
 
@@ -141,7 +140,7 @@ impl<'a, T: Into<&'a [u8]>> From<(T, u16)> for Address {
         let s = host.into();
         let mut domain = ArrayVec::new();
         domain.extend_from_slice(s);
-        Address::DomainName(domain, port)
+        Address::DomainName(Box::new(domain), port)
     }
 }
 

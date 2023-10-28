@@ -1,14 +1,20 @@
 use core::{convert::TryFrom, fmt::Debug};
 
-use crate::{Address, Error, TcpResponseHeader};
+use crate::{address::Address, error::Error, head::TcpResponseHeader};
 
-#[derive(Default, Copy, Clone, PartialEq)]
+#[derive(Debug, Default, Copy, Clone, PartialEq)]
 pub enum Method {
     #[default]
     NONE = 0x00,
     GSSAPI = 0x01,
     PASSWORD = 0x02,
     NotAcceptable = 0xff,
+}
+
+impl Method {
+    pub const fn size_hint() -> usize {
+        1
+    }
 }
 
 impl TryFrom<u8> for Method {
@@ -31,7 +37,7 @@ impl TryFrom<u8> for Method {
     }
 }
 
-#[derive(Copy, Clone)]
+#[derive(Debug, Copy, Clone)]
 pub enum Command {
     Connect = 0x01,
     Bind = 0x02,

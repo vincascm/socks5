@@ -1,0 +1,12 @@
+[package]
+name = "socks5"
+version = "0.4.2"
+authors = ["vinoca <vinoca@vinoca.org>"]
+description = "a implement of socks5 protocol"
+repository = "https://github.com/vincascm/socks5"
+edition = "2021"
+
+[dependencies]
+bytes.workspace = true
+futures-lite.workspace = true
+tinyvec.workspace = true
