@@ -53,9 +53,9 @@ impl<T: AsyncReadExt + Unpin> Decode<T> for Address {
             AddressType::Ipv4 => {
                 let mut buf = vec![0; 6];
                 r.read_exact(&mut buf).await?;
-                let v4addr: [u8; 4] = buf[1..=4].try_into()?;
+                let v4addr: [u8; 4] = buf[0..4].try_into()?;
                 let v4addr: Ipv4Addr = v4addr.into();
-                let port: [u8; 2] = buf[5..=6].try_into()?;
+                let port: [u8; 2] = buf[4..6].try_into()?;
                 let port = u16::from_be_bytes(port);
                 Ok(Address::Socket(SocketAddr::V4(SocketAddrV4::new(
                     v4addr, port,
@@ -64,9 +64,9 @@ impl<T: AsyncReadExt + Unpin> Decode<T> for Address {
             AddressType::Ipv6 => {
                 let mut buf = vec![0; 18];
                 r.read_exact(&mut buf).await?;
-                let v6addr: [u8; 16] = buf[1..=16].try_into()?;
+                let v6addr: [u8; 16] = buf[0..16].try_into()?;
                 let v6addr: Ipv6Addr = v6addr.into();
-                let port: [u8; 2] = buf[17..=18].try_into()?;
+                let port: [u8; 2] = buf[16..18].try_into()?;
                 let port = u16::from_be_bytes(port);
                 Ok(Address::Socket(SocketAddr::V6(SocketAddrV6::new(
                     v6addr, port, 0, 0,
