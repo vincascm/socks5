@@ -5,6 +5,7 @@ authors = ["vinoca <vinoca@vinoca.org>"]
 description = "a implement of socks5 protocol"
 repository = "https://github.com/vincascm/socks5"
 edition = "2024"
+license = "MIT"
 
 [dependencies]
 bytes.workspace = true
