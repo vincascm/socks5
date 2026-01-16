@@ -1,11 +1,10 @@
 [package]
 name = "socks5-client"
-version = "0.1.0"
-edition = "2021"
+version = "0.5.0"
+edition = "2024"
 
 [dependencies]
-anyhow.workspace = true
-async-dns.workspace = true
+thiserror.workspace = true
 async-io.workspace = true
 futures-lite.workspace = true
 socks5.workspace = true

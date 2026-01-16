@@ -1,10 +1,10 @@
 [package]
 name = "socks5"
-version = "0.4.2"
+version = "0.5.0"
 authors = ["vinoca <vinoca@vinoca.org>"]
 description = "a implement of socks5 protocol"
 repository = "https://github.com/vincascm/socks5"
-edition = "2021"
+edition = "2024"
 
 [dependencies]
 bytes.workspace = true

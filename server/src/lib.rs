@@ -3,18 +3,28 @@ use std::{
     net::{SocketAddr, TcpStream},
 };
 
-use anyhow::{anyhow, Result};
 use async_io::Async;
 use futures_lite::{
+    AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt,
     future::race,
     io::{copy, split},
-    AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt,
 };
 use socks5::{
+    error::Error as SocksError,
     head::{AuthenticationRequest, AuthenticationResponse, TcpRequestHeader},
     message::{Command, Method, Replies},
     ser::{Decode, Encode},
 };
+
+pub type Result<T> = std::result::Result<T, Error>;
+
+#[derive(thiserror::Error, Debug)]
+pub enum Error {
+    #[error("socks error: {0}")]
+    Socks(#[from] SocksError),
+    #[error("io error: {0}")]
+    Io(#[from] std::io::Error),
+}
 
 pub async fn proxy<'a, T: AsyncReadExt + AsyncWriteExt + Unpin + 'a>(
     connect: &mut T,
@@ -63,10 +73,9 @@ where
             };
 
             let (r, w) = split(connect);
-            race(copy(r, &dest_tcp), copy(&dest_tcp, w))
+            Ok(race(copy(r, &dest_tcp), copy(&dest_tcp, w))
                 .await
-                .map(|_| ())
-                .map_err(|_| anyhow!("io error"))
+                .map(|_| ())?)
         }
         // Bind and UdpAssociate, is not supported
         _ => {

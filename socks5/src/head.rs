@@ -6,7 +6,7 @@ use tinyvec::ArrayVec;
 
 use crate::{
     address::Address,
-    error::Result,
+    error::{Error, Result},
     message::{Command, Method, Replies},
     ser::{Decode, Encode},
 };
@@ -58,13 +58,7 @@ impl<'a> From<&'a [Method]> for AuthenticationRequest {
 
 /// SOCKS5 authentication response packet
 pub struct AuthenticationResponse {
-    method: Method,
-}
-
-impl AuthenticationResponse {
-    pub fn required_authentication(&self) -> bool {
-        self.method != Method::NONE
-    }
+    pub method: Method,
 }
 
 impl<T: AsyncReadExt + Unpin> Decode<T> for AuthenticationResponse {
@@ -86,6 +80,70 @@ impl Encode for AuthenticationResponse {
 impl From<Method> for AuthenticationResponse {
     fn from(method: Method) -> AuthenticationResponse {
         AuthenticationResponse { method }
+    }
+}
+
+pub struct SubNegotiationAuthenticationRequest {
+    username: String,
+    password: String,
+}
+
+impl SubNegotiationAuthenticationRequest {
+    pub fn new(username: &str, passowrd: &str) -> Result<Self> {
+        if username.len() > 255 || passowrd.len() > 255 {
+            Err(Error::new(
+                Replies::GeneralFailure,
+                "invalid length of username or password",
+            ))
+        } else {
+            Ok(Self {
+                username: username.to_string(),
+                password: passowrd.to_string(),
+            })
+        }
+    }
+
+    pub fn encode(&self) -> Bytes {
+        let mut buffer = BytesMut::new();
+        buffer.put_u8(1);
+        buffer.put_u8(self.username.len() as u8);
+        buffer.put_slice(self.username.as_bytes());
+        buffer.put_u8(self.password.len() as u8);
+        buffer.put_slice(self.password.as_bytes());
+        buffer.freeze()
+    }
+}
+
+impl<T: AsRef<str>, U: AsRef<str>> From<(T, U)> for SubNegotiationAuthenticationRequest {
+    fn from((username, password): (T, U)) -> Self {
+        Self {
+            username: username.as_ref().to_string(),
+            password: password.as_ref().to_string(),
+        }
+    }
+}
+
+pub struct SubNegotiationAuthenticationResponse {
+    result: u8,
+}
+
+impl SubNegotiationAuthenticationResponse {
+    pub fn success(&self) -> bool {
+        self.result == 0
+    }
+}
+
+impl<T: AsyncReadExt + Unpin> Decode<T> for SubNegotiationAuthenticationResponse {
+    async fn decode(r: &mut T) -> Result<Self> {
+        let version = Self::read_u8(r).await?;
+        if version != 1 {
+            return Err(Error::new(
+                Replies::GeneralFailure,
+                "invalid sub negotiation version",
+            ));
+        }
+        let result = Self::read_u8(r).await?;
+        Ok(SubNegotiationAuthenticationResponse { result })
     }
 }
 
