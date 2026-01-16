@@ -18,6 +18,7 @@
 - **支持多种认证**: 客户端支持`无认证`和`用户名/密码`认证。服务端目前实现了`无认证`模式。
 - **支持多种地址**: 支持 IPv4、IPv6 和域名地址类型。
 - **符合 RFC 1928**: 严格遵循 SOCKS5 协议标准。
+- **支持多种异步运行时**: 通过 `futures-lite`，支持 `tokio` 及 `smol` 异步运行时。
 
 ## 如何使用
 
@@ -28,68 +29,19 @@
 ```toml
 [dependencies]
 # 如果你需要 SOCKS5 核心协议
-socks5 = { git = "https://github.com/vincascm/socks5.git", branch = "main" }
+socks5 = { git = "https://github.com/vincascm/socks5.git" }
 
 # 如果你需要客户端功能
-socks5-client = { git = "https://github.com/vincascm/socks5.git", branch = "main" }
+socks5-client = { git = "https://github.com/vincascm/socks5.git" }
 
 # 如果你需要服务端功能
-socks5-server = { git = "https://github.com/vincascm/socks5.git", branch = "main" }
-```
-*请将 `your-repo` 替换为您的仓库地址。*
-
-### 客户端示例
-
-下面是一个使用 `socks5-client` 连接到 `example.com:80` 的例子。
-
-```rust
-use async_io::Async;
-use futures_lite::io::Cursor;
-use socks5::address::Address;
-use socks5_client::{connect, Result};
-use std::net::TcpStream;
-
-async fn client_example() -> Result<()> {
-    // 创建一个内存中的 stream 用于演示
-    let mut stream = Cursor::new(Vec::new());
-
-    // 目标地址
-    let dest_addr = Address::from(( "example.com", 80));
-
-    // 执行连接，这里不使用认证
-    connect(&mut stream, dest_addr, None).await?;
-
-    println!("Successfully connected via SOCKS5 proxy!");
-    Ok(())
-}
+socks5-server = { git = "https://github.com/vincascm/socks5.git" }
 ```
 
-### 服务端示例
+### 示例
 
-下面是一个使用 `socks5-server` 启动一个简单代理服务器的例子。
-
-```rust
-use async_io::Async;
-use futures_lite::io::Cursor;
-use socks5_server::{proxy, Result};
-use std::net::{SocketAddr, Ipv4Addr};
-
-async fn server_example() -> Result<()> {
-    // 模拟一个客户端连接
-    let mut stream = Cursor::new(Vec::new());
-
-    // 模拟客户端地址
-    let src_addr = SocketAddr::new(Ipv4Addr::new(127, 0, 0, 1).into(), 8080);
-
-    // 运行代理逻辑
-    // 注意：实际应用中 stream 应该是来自网络的真实 TCP 连接
-    proxy(&mut stream, src_addr).await?;
-
-    println!("Proxy logic completed!");
-    Ok(())
-}
-
-```
+客户端参见 [examples](/examples/examples)
+服务端参见 [socks5-server](https://github.com/vincascm/socks5-server)
 
 ## 贡献
 

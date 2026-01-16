@@ -5,6 +5,7 @@ members = [
     "socks5",
     "client",
     "server",
+    "examples",
 ]
 
 [workspace.dependencies]
