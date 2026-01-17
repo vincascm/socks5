@@ -135,14 +135,15 @@ impl SubNegotiationAuthenticationResponse {
 
 impl<T: AsyncReadExt + Unpin> Decode<T> for SubNegotiationAuthenticationResponse {
     async fn decode(r: &mut T) -> Result<Self> {
-        let version = Self::read_u8(r).await?;
-        if version != 1 {
+        let mut buf = [0; 2];
+        r.read_exact(&mut buf).await?;
+        if buf[0] != 1 {
             return Err(Error::new(
                 Replies::GeneralFailure,
                 "invalid sub negotiation version",
             ));
         }
-        let result = Self::read_u8(r).await?;
+        let result = buf[1];
         Ok(SubNegotiationAuthenticationResponse { result })
     }
 }

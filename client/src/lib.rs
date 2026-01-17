@@ -36,11 +36,7 @@ pub async fn connect<T>(
 where
     T: AsyncReadExt + AsyncWriteExt + Unpin,
 {
-    let method = match auth_info {
-        Some(_) => Method::PASSWORD,
-        None => Method::NONE,
-    };
-    let auth_req: AuthenticationRequest = [method; 1].as_slice().into();
+    let auth_req: AuthenticationRequest = [Method::PASSWORD, Method::NONE].as_slice().into();
     write(auth_req, connect).await?;
     let auth_resp = AuthenticationResponse::read(connect).await?;
     match auth_resp.method {
